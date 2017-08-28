@@ -27,6 +27,7 @@ import "strings"
 import "strconv"
 import "net/http"
 import "errors"
+import "runtime"
 
 /* Sample source stream starts like this:
 
@@ -102,8 +103,11 @@ func readChunkHeader(reader *bufio.Reader, boundary string) (head []byte, size i
 	if err != nil {
 		return
 	}
+	if bl := strings.TrimRight(string(line), "\r\n"); bl == "" {
+		line, err = reader.ReadSlice('\n')
+        }
 	if bl := strings.TrimRight(string(line), "\r\n"); bl != boundary {
-		err_str := fmt.Sprintf("Invalid boundary received (%s)", bl) 
+		err_str := fmt.Sprintf("Invalid boundary received (%s). Expected %s", bl, boundary) 
 		err = errors.New(err_str)
 		return
 	}
@@ -127,7 +131,7 @@ func readChunkHeader(reader *bufio.Reader, boundary string) (head []byte, size i
 		parts := strings.SplitN(line_str, ": ", 2)
 		if strings.EqualFold(parts[0], "Content-Length") {
 			var n int
-			n, err = strconv.Atoi(string(parts[1]))
+			n, err = strconv.Atoi(strings.Trim(string(parts[1]), " "))
 			if err != nil {
 				return
 			}
@@ -163,7 +167,7 @@ func readChunkData(reader *bufio.Reader, size int) (buf []byte, err error) {
 
 func getBoundary(resp http.Response) (string, error) {
 	ct := resp.Header.Get("Content-Type")
-	prefix := "multipart/x-mixed-replace;boundary="
+	prefix := "multipart/x-mixed-replace; boundary="
 	if !strings.HasPrefix(ct, prefix) {
 		err_str := fmt.Sprintf("Content-Type is invalid (%s)", ct)
 		return "", errors.New(err_str)
@@ -398,7 +402,8 @@ func makeHandler(pubsub *PubSub) http.HandlerFunc {
 }
 
 func main() {
-	// check parameters
+     	runtime.GOMAXPROCS(2)
+     	// check parameters
 	sourcePtr := flag.String("source", "http://example.com/img.mjpg", "source mjpg url")
 	usernamePtr := flag.String("username", "", "source mjpg username")
 	passwordPtr := flag.String("password", "", "source mjpg password")
